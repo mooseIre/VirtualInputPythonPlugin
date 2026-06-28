@@ -1,0 +1,11 @@
+x64/
+ARM64/
+Debug/
+Release/
+.build/
+*.tmh
+*.obj
+*.pdb
+*.recipe
+*.nativecodeanalysis.xml
+*.lastbuildstate

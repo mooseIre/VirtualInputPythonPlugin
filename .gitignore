@@ -1,0 +1,16 @@
+﻿__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+VirtualInput/x64/
+VirtualInput/ARM64/
+VirtualInput/Debug/
+VirtualInput/Release/
+VirtualInput/.build/
+VirtualInput/package/
+*.tmh
+*.obj
+*.pdb
+*.recipe
+*.nativecodeanalysis.xml
+*.lastbuildstate
