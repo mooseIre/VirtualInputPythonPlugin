@@ -42,12 +42,17 @@ Supported operations:
 - `mouse_move(dx, dy, buttons=0, duration_ms=0, steps=None)`
 - `human_mouse_move(dx, dy, duration_ms=300, steps=None, buttons=0, jitter=1.5)`
 - `mouse_move_abs(x, y, buttons=0)` for absolute movement in `0..32767`
+- `mouse_wheel(delta, buttons=0)` where positive values scroll up and negative values scroll down
+- `wheel_up(clicks=1, buttons=0)`
+- `wheel_down(clicks=1, buttons=0)`
+
+Mouse button constants include `BUTTON_LEFT`, `BUTTON_RIGHT`, `BUTTON_MIDDLE`, `BUTTON_X1`, and `BUTTON_X2`.
 
 ## Movement speed
 
 The driver itself does not store movement speed. The Python wrapper controls speed by splitting the requested relative movement into small HID reports and sleeping between reports. For example, `mouse_move(300, 120, duration_ms=500)` sends several smaller relative moves over about 500 ms.
 
-`human_mouse_move()` uses a smoothstep timing curve plus bounded random jitter before each step, so the cursor path is less linear. The final correction step still lands on the requested total delta.
+`human_mouse_move()` uses a smoothstep timing curve, a small curved path, bounded settling jitter, and slight timing variation between reports, so movement is less linear and less mechanically uniform. The final correction step still lands on the requested total delta.
 
 Example:
 
@@ -61,7 +66,10 @@ with InputBridge() as bridge:
     bridge.key_hold(0x1A, hold_ms=600)  # W
     bridge.mouse_move(300, 120, duration_ms=500)
     bridge.human_mouse_move(300, -80, duration_ms=700, jitter=2.0)
+    bridge.human_mouse_move(-180, 90, duration_ms=850, jitter=1.2)
     bridge.mouse_click(BUTTON_LEFT)
+    bridge.mouse_click(BUTTON_X1)
+    bridge.wheel_down(3)
 ```
 
 ## Development memory

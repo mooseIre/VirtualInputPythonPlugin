@@ -29,6 +29,8 @@ REPORT_ID_MOUSE_ABS_OUTPUT = 0x06
 BUTTON_LEFT = 0x01
 BUTTON_RIGHT = 0x02
 BUTTON_MIDDLE = 0x04
+BUTTON_X1 = 0x08
+BUTTON_X2 = 0x10
 
 MOD_LEFT_CTRL = 0x01
 MOD_LEFT_SHIFT = 0x02
@@ -309,7 +311,7 @@ class InputBridge:
             raise InputBridgeError("未找到 InputBridge HID 设备")
 
         keyboard = self._find_by_report_length(devices, 9)
-        mouse_rel = self._find_by_report_length(devices, 4)
+        mouse_rel = self._find_by_report_length(devices, 5)
         mouse_abs = self._find_by_report_length(devices, 6)
 
         if keyboard is None or mouse_rel is None or mouse_abs is None:
@@ -389,13 +391,23 @@ class InputBridge:
         time.sleep(hold_ms / 1000)
         self.key_up()
 
-    def _send_relative_move(self, dx: int, dy: int, buttons: int = 0) -> None:
+    def _send_relative_report(
+        self,
+        dx: int,
+        dy: int,
+        buttons: int = 0,
+        wheel: int = 0,
+    ) -> None:
         dx = max(-127, min(127, dx))
         dy = max(-127, min(127, dy))
+        wheel = max(-127, min(127, wheel))
         self._send(
             self._mouse_rel,
-            bytes([REPORT_ID_MOUSE_OUTPUT, buttons, dx & 0xFF, dy & 0xFF]),
+            bytes([REPORT_ID_MOUSE_OUTPUT, buttons, dx & 0xFF, dy & 0xFF, wheel & 0xFF]),
         )
+
+    def _send_relative_move(self, dx: int, dy: int, buttons: int = 0) -> None:
+        self._send_relative_report(dx, dy, buttons)
 
     def mouse_move(
         self,
@@ -450,20 +462,40 @@ class InputBridge:
     ) -> None:
         distance = max(abs(dx), abs(dy))
         if steps is None:
-            steps = max(1, min(120, math.ceil(distance / 30)))
+            if humanize:
+                steps = max(6, min(180, math.ceil(distance / random.uniform(8.0, 14.0))))
+            else:
+                steps = max(1, min(120, math.ceil(distance / 30)))
         interval = duration_ms / 1000 / steps if duration_ms > 0 else 0
+        vector_length = math.hypot(dx, dy)
+        if humanize and vector_length > 0:
+            perp_x = -dy / vector_length
+            perp_y = dx / vector_length
+            curve = random.uniform(-0.18, 0.18) * min(vector_length, 220)
+            wave_phase = random.uniform(0, math.tau)
+        else:
+            perp_x = 0.0
+            perp_y = 0.0
+            curve = 0.0
+            wave_phase = 0.0
 
         sent_x = 0
         sent_y = 0
         for index in range(1, steps + 1):
             t = index / steps
             if humanize:
-                t = 3 * t * t - 2 * t * t * t
-            target_x = dx * t
-            target_y = dy * t
+                eased_t = 3 * t * t - 2 * t * t * t
+                arc = math.sin(math.pi * t) * curve
+                arc += math.sin(math.tau * t + wave_phase) * curve * 0.18
+                target_x = dx * eased_t + perp_x * arc
+                target_y = dy * eased_t + perp_y * arc
+            else:
+                target_x = dx * t
+                target_y = dy * t
             if humanize and index < steps:
-                target_x += random.uniform(-jitter, jitter)
-                target_y += random.uniform(-jitter, jitter)
+                settle = max(0.15, 1.0 - t * 0.85)
+                target_x += random.uniform(-jitter, jitter) * settle
+                target_y += random.uniform(-jitter, jitter) * settle
 
             step_x = round(target_x - sent_x)
             step_y = round(target_y - sent_y)
@@ -478,7 +510,12 @@ class InputBridge:
                 step_y -= chunk_y
 
             if interval > 0 and index < steps:
-                time.sleep(interval)
+                sleep_for = interval
+                if humanize:
+                    sleep_for *= random.uniform(0.65, 1.45)
+                    if index < steps - 1 and random.random() < 0.05:
+                        sleep_for += min(0.035, interval * random.uniform(0.8, 2.4))
+                time.sleep(sleep_for)
 
         remain_x = dx - sent_x
         remain_y = dy - sent_y
@@ -512,6 +549,19 @@ class InputBridge:
         self.mouse_down(button)
         time.sleep(hold_ms / 1000)
         self.mouse_up()
+
+    def mouse_wheel(self, delta: int, buttons: int = 0) -> None:
+        delta = int(delta)
+        while delta:
+            chunk = max(-127, min(127, delta))
+            self._send_relative_report(0, 0, buttons, chunk)
+            delta -= chunk
+
+    def wheel_up(self, clicks: int = 1, buttons: int = 0) -> None:
+        self.mouse_wheel(abs(int(clicks)), buttons)
+
+    def wheel_down(self, clicks: int = 1, buttons: int = 0) -> None:
+        self.mouse_wheel(-abs(int(clicks)), buttons)
 
 
 if __name__ == "__main__":
